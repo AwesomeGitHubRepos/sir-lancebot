@@ -1,15 +1,15 @@
 import json
-import logging
 import random
 from pathlib import Path
 
 import discord
 from discord.ext import commands
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 from bot.constants import Colours
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 TEXT_OPTIONS = json.loads(
     Path("bot/resources/holidays/halloween/monster.json").read_text("utf8")
@@ -49,6 +49,6 @@ class MonsterBio(commands.Cog):
         await ctx.send(embed=embed)
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Monster Bio Cog."""
-    bot.add_cog(MonsterBio())
+    await bot.add_cog(MonsterBio())

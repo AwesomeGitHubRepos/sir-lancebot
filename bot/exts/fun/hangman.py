@@ -1,4 +1,3 @@
-from asyncio import TimeoutError
 from pathlib import Path
 from random import choice
 
@@ -89,7 +88,7 @@ class Hangman(commands.Cog):
         word = choice(filtered_words)
         # `pretty_word` is used for comparing the indices where the guess of the user is similar to the word
         # The `user_guess` variable is prettified by adding spaces between every dash, and so is the `pretty_word`
-        pretty_word = ''.join([f"{letter} " for letter in word])[:-1]
+        pretty_word = "".join([f"{letter} " for letter in word])[:-1]
         user_guess = ("_ " * len(word))[:-1]
         tries = 6
         guessed_letters = set()
@@ -104,23 +103,23 @@ class Hangman(commands.Cog):
         ))
 
         # Game loop
-        while user_guess.replace(' ', '') != word:
+        while user_guess.replace(" ", "") != word:
             # Edit the message to the current state of the game
             await original_message.edit(embed=self.create_embed(tries, user_guess))
 
             try:
                 message = await self.bot.wait_for(
-                    event="message",
+                    "message",
                     timeout=60.0,
                     check=check
                 )
             except TimeoutError:
                 timeout_embed = Embed(
-                    title=choice(NEGATIVE_REPLIES),
-                    description="Looks like the bot timed out! You must send a letter within 60 seconds.",
+                    title="You lost",
+                    description=f"Time's up! The correct word was `{word}`.",
                     color=Colours.soft_red,
                 )
-                await original_message.edit(embed=timeout_embed)
+                await ctx.send(embed=timeout_embed)
                 return
 
             # If the user enters a capital letter as their guess, it is automatically converted to a lowercase letter
@@ -136,7 +135,7 @@ class Hangman(commands.Cog):
                 continue
 
             # Checks for repeated guesses
-            elif normalized_content in guessed_letters:
+            if normalized_content in guessed_letters:
                 already_guessed_embed = Embed(
                     title=choice(NEGATIVE_REPLIES),
                     description=f"You have already guessed `{normalized_content}`, try again!",
@@ -146,12 +145,11 @@ class Hangman(commands.Cog):
                 continue
 
             # Checks for correct guesses from the user
-            elif normalized_content in word:
+            if normalized_content in word:
                 positions = {idx for idx, letter in enumerate(pretty_word) if letter == normalized_content}
                 user_guess = "".join(
                     [normalized_content if index in positions else dash for index, dash in enumerate(user_guess)]
                 )
-
             else:
                 tries -= 1
 
@@ -177,6 +175,6 @@ class Hangman(commands.Cog):
         await ctx.send(embed=win_embed)
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Hangman cog."""
-    bot.add_cog(Hangman(bot))
+    await bot.add_cog(Hangman(bot))

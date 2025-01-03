@@ -1,5 +1,4 @@
 import json
-from asyncio import TimeoutError
 from pathlib import Path
 from random import choice
 from typing import TypedDict
@@ -93,7 +92,7 @@ class Madlibs(commands.Cog):
             await original_message.edit(embed=madlibs_embed)
 
             try:
-                message = await self.bot.wait_for(event="message", check=author_check, timeout=TIMEOUT)
+                message = await self.bot.wait_for("message", check=author_check, timeout=TIMEOUT)
             except TimeoutError:
                 timeout_embed = discord.Embed(
                     title=choice(NEGATIVE_REPLIES),
@@ -117,7 +116,7 @@ class Madlibs(commands.Cog):
         self.checks.remove(author_check)
 
         story = []
-        for value, blank in zip(random_template["value"], blanks):
+        for value, blank in zip(random_template["value"], blanks, strict=True):
             story.append(f"{value}__{blank}__")
 
         # In each story template, there is always one more "value"
@@ -143,6 +142,6 @@ class Madlibs(commands.Cog):
             error.handled = True
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Madlibs cog."""
-    bot.add_cog(Madlibs(bot))
+    await bot.add_cog(Madlibs(bot))

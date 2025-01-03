@@ -1,14 +1,14 @@
 import asyncio
 import json
-import logging
 import random
 from pathlib import Path
 
 from discord.ext import commands
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 RESPONSES = json.loads(Path("bot/resources/holidays/halloween/responses.json").read_text("utf8"))
 
@@ -26,6 +26,6 @@ class SpookyEightBall(commands.Cog):
             await msg.edit(content=f"{choice[0]} \n{choice[1]}")
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Spooky Eight Ball Cog."""
-    bot.add_cog(SpookyEightBall())
+    await bot.add_cog(SpookyEightBall())

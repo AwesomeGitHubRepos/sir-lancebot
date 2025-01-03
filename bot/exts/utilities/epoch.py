@@ -1,4 +1,5 @@
-from typing import Optional, Union
+
+import contextlib
 
 import arrow
 import discord
@@ -6,7 +7,6 @@ from dateutil import parser
 from discord.ext import commands
 
 from bot.bot import Bot
-from bot.utils.extensions import invoke_help_command
 
 # https://discord.com/developers/docs/reference#message-formatting-timestamp-styles
 STYLES = {
@@ -25,7 +25,7 @@ DROPDOWN_TIMEOUT = 60
 class DateString(commands.Converter):
     """Convert a relative or absolute date/time string to an arrow.Arrow object."""
 
-    async def convert(self, ctx: commands.Context, argument: str) -> Union[arrow.Arrow, Optional[tuple]]:
+    async def convert(self, ctx: commands.Context, argument: str) -> arrow.Arrow | tuple | None:
         """
         Convert a relative or absolute date/time string to an arrow.Arrow object.
 
@@ -47,6 +47,9 @@ class DateString(commands.Converter):
 
 class Epoch(commands.Cog):
     """Convert an entered time and date to a unix timestamp."""
+
+    def __init__(self, bot: Bot) -> None:
+        self.bot = bot
 
     @commands.command(name="epoch")
     async def epoch(self, ctx: commands.Context, *, date_time: DateString = None) -> None:
@@ -71,7 +74,7 @@ class Epoch(commands.Cog):
         Times in the dropdown are shown in UTC
         """
         if not date_time:
-            await invoke_help_command(ctx)
+            await self.bot.invoke_help_command(ctx)
             return
 
         if isinstance(date_time, tuple):
@@ -86,7 +89,8 @@ class Epoch(commands.Cog):
         view = TimestampMenuView(ctx, self._format_dates(date_time), epoch)
         original = await ctx.send(f"`{epoch}`", view=view)
         await view.wait()  # wait until expiration before removing the dropdown
-        await original.edit(view=None)
+        with contextlib.suppress(discord.NotFound):
+            await original.edit(view=None)
 
     @staticmethod
     def _format_dates(date: arrow.Arrow) -> list[str]:
@@ -95,7 +99,7 @@ class Epoch(commands.Cog):
 
         These are used in the description of each style in the dropdown
         """
-        date = date.to('utc')
+        date = date.to("utc")
         formatted = [str(int(date.timestamp()))]
         formatted += [date.format(format[1]) for format in list(STYLES.values())[1:7]]
         formatted.append(date.humanize())
@@ -110,11 +114,11 @@ class TimestampMenuView(discord.ui.View):
         self.ctx = ctx
         self.epoch = epoch
         self.dropdown: discord.ui.Select = self.children[0]
-        for label, date_time in zip(STYLES.keys(), formatted_times):
+        for label, date_time in zip(STYLES.keys(), formatted_times, strict=True):
             self.dropdown.add_option(label=label, description=date_time)
 
     @discord.ui.select(placeholder="Select the format of your timestamp")
-    async def select_format(self, _: discord.ui.Select, interaction: discord.Interaction) -> discord.Message:
+    async def select_format(self, interaction: discord.Interaction, _: discord.ui.Select) -> None:
         """Drop down menu which contains a list of formats which discord timestamps can take."""
         selected = interaction.data["values"][0]
         if selected == "Epoch":
@@ -130,6 +134,6 @@ class TimestampMenuView(discord.ui.View):
         return True
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Epoch cog."""
-    bot.add_cog(Epoch())
+    await bot.add_cog(Epoch(bot))

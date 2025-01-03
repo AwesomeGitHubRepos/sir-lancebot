@@ -1,17 +1,15 @@
-import logging
 from collections.abc import Iterator
 from dataclasses import dataclass
 from random import randint, random
-from typing import Union
 
 import discord
 from discord.ext import commands
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 from bot.constants import Client
 from bot.utils.converters import CoordinateConverter
 from bot.utils.exceptions import UserNotPlayingError
-from bot.utils.extensions import invoke_help_command
 
 MESSAGE_MAPPING = {
     0: ":stop_button:",
@@ -31,10 +29,10 @@ MESSAGE_MAPPING = {
     "x": ":x:"
 }
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
-GameBoard = list[list[Union[str, int]]]
+GameBoard = list[list[str | int]]
 
 
 @dataclass
@@ -51,13 +49,14 @@ class Game:
 class Minesweeper(commands.Cog):
     """Play a game of Minesweeper."""
 
-    def __init__(self):
+    def __init__(self, bot: Bot):
+        self.bot = bot
         self.games: dict[int, Game] = {}
 
     @commands.group(name="minesweeper", aliases=("ms",), invoke_without_command=True)
     async def minesweeper_group(self, ctx: commands.Context) -> None:
         """Commands for Playing Minesweeper."""
-        await invoke_help_command(ctx)
+        await self.bot.invoke_help_command(ctx)
 
     @staticmethod
     def get_neighbours(x: int, y: int) -> Iterator[tuple[int, int]]:
@@ -205,9 +204,9 @@ class Minesweeper(commands.Cog):
             for y in range(10)
         ):
             return False
-        else:
-            await self.won(ctx)
-            return True
+
+        await self.won(ctx)
+        return True
 
     async def reveal_one(
         self,
@@ -227,7 +226,7 @@ class Minesweeper(commands.Cog):
             await self.lost(ctx)
             revealed[y][x] = "x"  # mark bomb that made you lose with a x
             return True
-        elif board[y][x] == 0:
+        if board[y][x] == 0:
             self.reveal_zeros(revealed, board, x, y)
         return await self.check_if_won(ctx, revealed, board)
 
@@ -265,6 +264,6 @@ class Minesweeper(commands.Cog):
         del self.games[ctx.author.id]
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Minesweeper cog."""
-    bot.add_cog(Minesweeper())
+    await bot.add_cog(Minesweeper(bot))

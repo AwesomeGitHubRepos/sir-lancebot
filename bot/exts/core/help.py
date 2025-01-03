@@ -1,28 +1,26 @@
 # Help command from Python bot. All commands that will be added to there in futures should be added to here too.
 import asyncio
 import itertools
-import logging
 from contextlib import suppress
-from typing import NamedTuple, Union
+from typing import NamedTuple
 
 from discord import Colour, Embed, HTTPException, Message, Reaction, User
 from discord.ext import commands
 from discord.ext.commands import CheckFailure, Cog as DiscordCog, Command, Context
-from rapidfuzz import process
+from pydis_core.utils.logging import get_logger
 
 from bot import constants
 from bot.bot import Bot
-from bot.constants import Emojis
-from bot.utils.pagination import FIRST_EMOJI, LAST_EMOJI, LEFT_EMOJI, LinePaginator, RIGHT_EMOJI
-
-DELETE_EMOJI = Emojis.trashcan
+from bot.utils.commands import get_command_suggestions
+from bot.utils.decorators import whitelist_override
+from bot.utils.pagination import LinePaginator, PAGINATION_EMOJI
 
 REACTIONS = {
-    FIRST_EMOJI: "first",
-    LEFT_EMOJI: "back",
-    RIGHT_EMOJI: "next",
-    LAST_EMOJI: "end",
-    DELETE_EMOJI: "stop",
+    PAGINATION_EMOJI.first: "first",
+    PAGINATION_EMOJI.left: "back",
+    PAGINATION_EMOJI.right: "next",
+    PAGINATION_EMOJI.last: "end",
+    PAGINATION_EMOJI.delete: "stop",
 }
 
 
@@ -34,21 +32,25 @@ class Cog(NamedTuple):
     commands: list[Command]
 
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
-class HelpQueryNotFound(ValueError):
+class HelpQueryNotFoundError(ValueError):
     """
     Raised when a HelpSession Query doesn't match a command or cog.
 
-    Contains the custom attribute of ``possible_matches``.
-    Instances of this object contain a dictionary of any command(s) that were close to matching the
-    query, where keys are the possible matched command names and values are the likeness match scores.
+    Params:
+    possible_matches: list of similar command names.
+    parent_command: parent command of an invalid subcommand. Only available when an invalid subcommand
+                    has been passed.
     """
 
-    def __init__(self, arg: str, possible_matches: dict = None):
+    def __init__(
+            self, arg: str, possible_matches: list[str] | None = None, *, parent_command: Command | None = None
+    ) -> None:
         super().__init__(arg)
         self.possible_matches = possible_matches
+        self.parent_command = parent_command
 
 
 class HelpSession:
@@ -112,7 +114,7 @@ class HelpSession:
         self._timeout_task = None
         self.reset_timeout()
 
-    def _get_query(self, query: str) -> Union[Command, Cog]:
+    def _get_query(self, query: str) -> Command | Cog | None:
         """Attempts to match the provided query with a valid command or cog."""
         command = self._bot.get_command(query)
         if command:
@@ -146,6 +148,7 @@ class HelpSession:
             )
 
         self._handle_not_found(query)
+        return None
 
     def _handle_not_found(self, query: str) -> None:
         """
@@ -153,12 +156,17 @@ class HelpSession:
 
         Will pass on possible close matches along with the `HelpQueryNotFound` exception.
         """
-        # Combine command and cog names
-        choices = list(self._bot.all_commands) + list(self._bot.cogs)
+        # Check if parent command is valid in case subcommand is invalid.
+        if " " in query:
+            parent, *_ = query.split()
+            parent_command = self._bot.get_command(parent)
 
-        result = process.extract(query, choices, score_cutoff=90)
+            if parent_command:
+                raise HelpQueryNotFoundError("Invalid Subcommand.", parent_command=parent_command)
 
-        raise HelpQueryNotFound(f'Query "{query}" not found.', dict(result))
+        similar_commands = get_command_suggestions(list(self._bot.all_commands.keys()), query)
+
+        raise HelpQueryNotFoundError(f'Query "{query}" not found.', similar_commands)
 
     async def timeout(self, seconds: int = 30) -> None:
         """Waits for a set number of seconds, then stops the help session."""
@@ -168,9 +176,8 @@ class HelpSession:
     def reset_timeout(self) -> None:
         """Cancels the original timeout task and sets it again from the start."""
         # cancel original if it exists
-        if self._timeout_task:
-            if not self._timeout_task.cancelled():
-                self._timeout_task.cancel()
+        if self._timeout_task and not self._timeout_task.cancelled():
+            self._timeout_task.cancel()
 
         # recreate the timeout task
         self._timeout_task = self._bot.loop.create_task(self.timeout())
@@ -210,11 +217,11 @@ class HelpSession:
     async def prepare(self) -> None:
         """Sets up the help session pages, events, message and reactions."""
         await self.build_pages()
+        await self.update_page()
 
         self._bot.add_listener(self.on_reaction_add)
         self._bot.add_listener(self.on_message_delete)
 
-        await self.update_page()
         self.add_reactions()
 
     def add_reactions(self) -> None:
@@ -226,7 +233,7 @@ class HelpSession:
 
         # if single-page
         else:
-            self._bot.loop.create_task(self.message.add_reaction(DELETE_EMOJI))
+            self._bot.loop.create_task(self.message.add_reaction(PAGINATION_EMOJI.delete))
 
     def _category_key(self, cmd: Command) -> str:
         """
@@ -242,8 +249,7 @@ class HelpSession:
                 pass
 
             return f"**{cmd.cog_name}**"
-        else:
-            return "**\u200bNo Category:**"
+        return "**\u200bNo Category:**"
 
     def _get_command_params(self, cmd: Command) -> str:
         """
@@ -276,8 +282,7 @@ class HelpSession:
             # if required
             else:
                 results.append(f"<{name}>")
-
-        return f"{cmd.name} {' '.join(results)}"
+        return " ".join([cmd.qualified_name, *results])
 
     async def build_pages(self) -> None:
         """Builds the list of content pages to be paginated through in the help message, as a list of str."""
@@ -295,7 +300,7 @@ class HelpSession:
             paginator.add_line(f"*{self.description}*")
 
         # list all children commands of the queried object
-        if isinstance(self.query, (commands.GroupMixin, Cog)):
+        if isinstance(self.query, commands.GroupMixin | Cog):
             await self._list_child_commands(paginator)
 
         self._pages = paginator.pages
@@ -304,9 +309,10 @@ class HelpSession:
         prefix = constants.Client.prefix
 
         signature = self._get_command_params(self.query)
+        paginator.add_line(f"**```\n{prefix}{signature}\n```**")
+
         parent = self.query.full_parent_name + " " if self.query.parent else ""
-        paginator.add_line(f"**```\n{prefix}{parent}{signature}\n```**")
-        aliases = [f"`{alias}`" if not parent else f"`{parent} {alias}`" for alias in self.query.aliases]
+        aliases = [f"`{alias}`" if not parent else f"`{parent}{alias}`" for alias in self.query.aliases]
         aliases += [f"`{alias}`" for alias in getattr(self.query, "root_aliases", ())]
         aliases = ", ".join(sorted(aliases))
         if aliases:
@@ -407,7 +413,7 @@ class HelpSession:
         """Returns an Embed with the requested page formatted within."""
         embed = Embed()
 
-        if isinstance(self.query, (commands.Command, Cog)) and page_number > 0:
+        if isinstance(self.query, commands.Command | Cog) and page_number > 0:
             title = f'Command Help | "{self.query.name}"'
         else:
             title = self.title
@@ -502,18 +508,26 @@ class Help(DiscordCog):
     """Custom Embed Pagination Help feature."""
 
     @commands.command("help")
+    @whitelist_override(allow_dm=True)
     async def new_help(self, ctx: Context, *commands) -> None:
         """Shows Command Help."""
         try:
             await HelpSession.start(ctx, *commands)
-        except HelpQueryNotFound as error:
+        except HelpQueryNotFoundError as error:
+
+            # Send help message of parent command if subcommand is invalid.
+            if cmd := error.parent_command:
+                await ctx.send(str(error))
+                await self.new_help(ctx, cmd.qualified_name)
+                return
+
             embed = Embed()
             embed.colour = Colour.red()
             embed.title = str(error)
 
             if error.possible_matches:
-                matches = "\n".join(error.possible_matches.keys())
-                embed.description = f"**Did you mean:**\n`{matches}`"
+                matches = "\n".join(error.possible_matches)
+                embed.description = f"**Did you mean:**\n{matches}"
 
             await ctx.send(embed=embed)
 
@@ -528,7 +542,7 @@ def unload(bot: Bot) -> None:
     bot.add_command(bot._old_help)
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """
     The setup for the help extension.
 
@@ -543,7 +557,7 @@ def setup(bot: Bot) -> None:
     bot.remove_command("help")
 
     try:
-        bot.add_cog(Help())
+        await bot.add_cog(Help())
     except Exception:
         unload(bot)
         raise

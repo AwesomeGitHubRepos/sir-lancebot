@@ -1,13 +1,13 @@
-import logging
 import random
 from json import loads
 from pathlib import Path
 
 from discord.ext import commands
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 ALL_VIDS = loads(Path("bot/resources/holidays/easter/april_fools_vids.json").read_text("utf-8"))
 
@@ -25,6 +25,6 @@ class AprilFoolVideos(commands.Cog):
         await ctx.send(f"Check out this April Fools' video by {channel}.\n\n{url}")
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the April Fools' Cog."""
-    bot.add_cog(AprilFoolVideos())
+    await bot.add_cog(AprilFoolVideos())

@@ -1,14 +1,14 @@
 import json
-import logging
 from pathlib import Path
 from random import shuffle
 
 import discord
 from discord.ext import commands
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 game_recs = []
 
 # Populate the list `game_recs` with resource files
@@ -46,6 +46,6 @@ class RecommendGame(commands.Cog):
         await ctx.send(embed=embed)
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Loads the RecommendGame cog."""
-    bot.add_cog(RecommendGame(bot))
+    await bot.add_cog(RecommendGame(bot))

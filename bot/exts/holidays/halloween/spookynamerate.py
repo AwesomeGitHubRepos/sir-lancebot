@@ -2,23 +2,22 @@ import asyncio
 import json
 import random
 from collections import defaultdict
-from datetime import datetime, timedelta
-from logging import getLogger
+from datetime import UTC, datetime, timedelta
 from os import getenv
 from pathlib import Path
-from typing import Optional
 
 from async_rediscache import RedisCache
 from discord import Embed, Reaction, TextChannel, User
 from discord.colour import Colour
 from discord.ext import tasks
 from discord.ext.commands import Cog, Context, group
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 from bot.constants import Channels, Client, Colours, Month
 from bot.utils.decorators import InMonthCheckFailure
 
-logger = getLogger(__name__)
+logger = get_logger(__name__)
 
 EMOJIS_VAL = {
     "\N{Jack-O-Lantern}": 1,
@@ -95,8 +94,6 @@ class SpookyNameRate(Cog):
         self.bot = bot
         self.name = None
 
-        self.bot.loop.create_task(self.load_vars())
-
         self.first_time = None
         self.poll = False
         self.announce_name.start()
@@ -104,7 +101,7 @@ class SpookyNameRate(Cog):
         # Define an asyncio.Lock() to make sure the dictionary isn't changed
         # when checking the messages for duplicate emojis'
 
-    async def load_vars(self) -> None:
+    async def cog_load(self) -> None:
         """Loads the variables that couldn't be loaded in __init__."""
         self.first_time = await self.data.get("first_time", True)
         self.name = await self.data.get("name")
@@ -148,7 +145,7 @@ class SpookyNameRate(Cog):
                 )
                 return
 
-            elif data["name"] == name:
+            if data["name"] == name:
                 await ctx.send("TOO LATE. Someone has already added this name.")
                 return
 
@@ -223,7 +220,7 @@ class SpookyNameRate(Cog):
         if self.first_time:
             await channel.send(
                 "Okkey... Welcome to the **Spooky Name Rate Game**! It's a relatively simple game.\n"
-                f"Everyday, a random name will be sent in <#{Channels.community_bot_commands}> "
+                f"Everyday, a random name will be sent in <#{Channels.sir_lancebot_playground}> "
                 "and you need to try and spookify it!\nRegister your name using "
                 f"`{Client.prefix}spookynamerate add spookified name`"
             )
@@ -263,12 +260,8 @@ class SpookyNameRate(Cog):
             winners = []
             for i, winner in enumerate(winner_messages):
                 winners.append(winner)
-                if len(winner_messages) > i + 1:
-                    if winner_messages[i + 1][1]["score"] != winner[1]["score"]:
-                        break
-                elif len(winner_messages) == (i + 1) + 1:  # The next element is the last element
-                    if winner_messages[i + 1][1]["score"] != winner[1]["score"]:
-                        break
+                if len(winner_messages) > i + 1 and winner_messages[i + 1][1]["score"] != winner[1]["score"]:
+                    break
 
             # one iteration is complete
             await channel.send("Today's Spooky Name Rate Game ends now, and the winner(s) is(are)...")
@@ -315,7 +308,7 @@ class SpookyNameRate(Cog):
         if SpookyNameRate.debug:
             return
 
-        now = datetime.utcnow()
+        now = datetime.now(tz=UTC)
         if now.hour < 12:
             twelve_pm = now.replace(hour=12, minute=0, second=0, microsecond=0)
             time_left = twelve_pm - now
@@ -355,14 +348,13 @@ class SpookyNameRate(Cog):
 
         return embed
 
-    async def get_channel(self) -> Optional[TextChannel]:
+    async def get_channel(self) -> TextChannel | None:
         """Gets the sir-lancebot-channel after waiting until ready."""
-        await self.bot.wait_until_ready()
         channel = self.bot.get_channel(
-            Channels.community_bot_commands
-        ) or await self.bot.fetch_channel(Channels.community_bot_commands)
+            Channels.sir_lancebot_playground
+        ) or await self.bot.fetch_channel(Channels.sir_lancebot_playground)
         if not channel:
-            logger.warning("Bot is unable to get the #seasonalbot-commands channel. Please check the channel ID.")
+            logger.warning("Bot is unable to get the #sir-lancebot-playground channel. Please check the channel ID.")
         return channel
 
     @staticmethod
@@ -372,7 +364,7 @@ class SpookyNameRate(Cog):
             return True
 
         if not Client.month_override:
-            return datetime.utcnow().month == Month.OCTOBER
+            return datetime.now(tz=UTC).month == Month.OCTOBER
         return Client.month_override == Month.OCTOBER
 
     def cog_check(self, ctx: Context) -> bool:
@@ -386,6 +378,6 @@ class SpookyNameRate(Cog):
         self.announce_name.cancel()
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the SpookyNameRate Cog."""
-    bot.add_cog(SpookyNameRate(bot))
+    await bot.add_cog(SpookyNameRate(bot))

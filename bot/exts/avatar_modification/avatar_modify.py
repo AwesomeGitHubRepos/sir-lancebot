@@ -1,23 +1,23 @@
 import asyncio
 import json
-import logging
 import math
 import string
 import unicodedata
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Callable, Optional, TypeVar, Union
+from typing import TypeVar
 
 import discord
 from discord.ext import commands
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 from bot.constants import Colours, Emojis
 from bot.exts.avatar_modification._effects import PfpEffects
-from bot.utils.extensions import invoke_help_command
 from bot.utils.halloween import spookifications
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _EXECUTOR = ThreadPoolExecutor(10)
 
@@ -65,7 +65,7 @@ class AvatarModify(commands.Cog):
     def __init__(self, bot: Bot):
         self.bot = bot
 
-    async def _fetch_user(self, user_id: int) -> Optional[discord.User]:
+    async def _fetch_user(self, user_id: int) -> discord.User | None:
         """
         Fetches a user and handles errors.
 
@@ -89,7 +89,7 @@ class AvatarModify(commands.Cog):
     async def avatar_modify(self, ctx: commands.Context) -> None:
         """Groups all of the pfp modifying commands to allow a single concurrency limit."""
         if not ctx.invoked_subcommand:
-            await invoke_help_command(ctx)
+            await self.bot.invoke_help_command(ctx)
 
     @avatar_modify.command(name="8bitify", root_aliases=("8bitify",))
     async def eightbit_command(self, ctx: commands.Context) -> None:
@@ -121,7 +121,7 @@ class AvatarModify(commands.Cog):
         await ctx.send(embed=embed, file=file)
 
     @avatar_modify.command(name="reverse", root_aliases=("reverse",))
-    async def reverse(self, ctx: commands.Context, *, text: Optional[str]) -> None:
+    async def reverse(self, ctx: commands.Context, *, text: str | None) -> None:
         """
         Reverses the sent text.
 
@@ -158,9 +158,9 @@ class AvatarModify(commands.Cog):
             await ctx.send(embed=embed, file=file)
 
     @avatar_modify.command(aliases=("easterify",), root_aliases=("easterify", "avatareasterify"))
-    async def avatareasterify(self, ctx: commands.Context, *colours: Union[discord.Colour, str]) -> None:
+    async def avatareasterify(self, ctx: commands.Context, *colours: discord.Colour | str) -> None:
         """
-        This "Easterifies" the user's avatar.
+        Easterify the user's avatar.
 
         Given colours will produce a personalised egg in the corner, similar to the egg_decorate command.
         If colours are not given, a nice little chocolate bunny will sit in the corner.
@@ -169,13 +169,14 @@ class AvatarModify(commands.Cog):
         """
         async def send(*args, **kwargs) -> str:
             """
-            This replaces the original ctx.send.
+            Replace the original ctx.send.
 
             When invoking the egg decorating command, the egg itself doesn't print to to the channel.
-            Returns the message content so that if any errors occur, the error message can be output.
+            Return the message content so that if any errors occur, the error message can be output.
             """
             if args:
                 return args[0]
+            return None
 
         async with ctx.typing():
             user = await self._fetch_user(ctx.author.id)
@@ -249,11 +250,11 @@ class AvatarModify(commands.Cog):
     )
     async def prideavatar(self, ctx: commands.Context, option: str = "lgbt", pixels: int = 64) -> None:
         """
-        This surrounds an avatar with a border of a specified LGBT flag.
+        Surround an avatar with a border of a specified LGBT flag.
 
-        This defaults to the LGBT rainbow flag if none is given.
+        Default to the LGBT rainbow flag if none is given.
         The amount of pixels can be given which determines the thickness of the flag border.
-        This has a maximum of 512px and defaults to a 64px border.
+        A maximum of 512px is enforced, defaults to a 64px border.
         The full image is 1024x1024.
         """
         option = option.lower()
@@ -273,7 +274,7 @@ class AvatarModify(commands.Cog):
 
     @prideavatar.command()
     async def flags(self, ctx: commands.Context) -> None:
-        """This lists the flags that can be used with the prideavatar command."""
+        """Lists the flags that can be used with the prideavatar command."""
         choices = sorted(set(GENDER_OPTIONS.values()))
         options = "• " + "\n• ".join(choices)
         embed = discord.Embed(
@@ -289,7 +290,7 @@ class AvatarModify(commands.Cog):
         brief="Spookify a user's avatar."
     )
     async def spookyavatar(self, ctx: commands.Context) -> None:
-        """This "spookifies" the user's avatar, with a random *spooky* effect."""
+        """Spookify the user's avatar, with a random *spooky* effect."""
         user = await self._fetch_user(ctx.author.id)
         if not user:
             await ctx.send(f"{Emojis.cross_mark} Could not get user info.")
@@ -367,6 +368,6 @@ class AvatarModify(commands.Cog):
             await ctx.send(file=file, embed=embed)
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the AvatarModify cog."""
-    bot.add_cog(AvatarModify(bot))
+    await bot.add_cog(AvatarModify(bot))

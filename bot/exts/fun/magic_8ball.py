@@ -1,13 +1,13 @@
 import json
-import logging
 import random
 from pathlib import Path
 
 from discord.ext import commands
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 ANSWERS = json.loads(Path("bot/resources/fun/magic8ball.json").read_text("utf8"))
 
@@ -25,6 +25,6 @@ class Magic8ball(commands.Cog):
             await ctx.send("Usage: .8ball <question> (minimum length of 3 eg: `will I win?`)")
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Magic8Ball Cog."""
-    bot.add_cog(Magic8ball())
+    await bot.add_cog(Magic8ball())

@@ -1,16 +1,15 @@
 import asyncio
 import functools
-import logging
 import random
 from asyncio import Lock
-from collections.abc import Container
+from collections.abc import Callable, Container
 from functools import wraps
-from typing import Callable, Optional, Union
 from weakref import WeakValueDictionary
 
 from discord import Colour, Embed
 from discord.ext import commands
 from discord.ext.commands import CheckFailure, Command, Context
+from pydis_core.utils.logging import get_logger
 
 from bot.constants import Channels, ERROR_REPLIES, Month, WHITELISTED_CHANNELS
 from bot.utils import human_months, resolve_current_month
@@ -18,22 +17,18 @@ from bot.utils.checks import in_whitelist_check
 
 ONE_DAY = 24 * 60 * 60
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class InChannelCheckFailure(CheckFailure):
     """Check failure when the user runs a command in a non-whitelisted channel."""
 
-    pass
-
 
 class InMonthCheckFailure(CheckFailure):
     """Check failure for when a command is invoked outside of its allowed month."""
 
-    pass
 
-
-def seasonal_task(*allowed_months: Month, sleep_time: Union[float, int] = ONE_DAY) -> Callable:
+def seasonal_task(*allowed_months: Month, sleep_time: float | int = ONE_DAY) -> Callable:
     """
     Perform the decorated method periodically in `allowed_months`.
 
@@ -79,8 +74,8 @@ def in_month_listener(*allowed_months: Month) -> Callable:
             if current_month in allowed_months:
                 # Propagate return value although it should always be None
                 return await listener(*args, **kwargs)
-            else:
-                log.debug(f"Guarded {listener.__qualname__} from invoking in {current_month!s}")
+            log.debug(f"Guarded {listener.__qualname__} from invoking in {current_month!s}")
+            return None
         return guarded_listener
     return decorator
 
@@ -101,8 +96,7 @@ def in_month_command(*allowed_months: Month) -> Callable:
         )
         if can_run:
             return True
-        else:
-            raise InMonthCheckFailure(f"Command can only be used in {human_months(allowed_months)}")
+        raise InMonthCheckFailure(f"Command can only be used in {human_months(allowed_months)}")
 
     return commands.check(predicate)
 
@@ -128,12 +122,12 @@ def in_month(*allowed_months: Month) -> Callable:
     def decorator(callable_: Callable) -> Callable:
         # Functions decorated as commands are turned into instances of `Command`
         if isinstance(callable_, Command):
-            logging.debug(f"Command {callable_.qualified_name} will be locked to {human_months(allowed_months)}")
+            log.debug(f"Command {callable_.qualified_name} will be locked to {human_months(allowed_months)}")
             actual_deco = in_month_command(*allowed_months)
 
         # D.py will assign this attribute when `callable_` is registered as a listener
         elif hasattr(callable_, "__cog_listener__"):
-            logging.debug(f"Listener {callable_.__qualname__} will be locked to {human_months(allowed_months)}")
+            log.debug(f"Listener {callable_.__qualname__} will be locked to {human_months(allowed_months)}")
             actual_deco = in_month_listener(*allowed_months)
 
         # Otherwise we're unsure exactly what has been decorated
@@ -199,13 +193,28 @@ def whitelist_check(**default_kwargs: Container[int]) -> Callable[[Context], boo
         kwargs = default_kwargs.copy()
         allow_dms = False
 
-        # Update kwargs based on override
-        if hasattr(ctx.command.callback, "override"):
+        # Determine which command's overrides we will use. Group commands will
+        # inherit from their parents if they don't define their own overrides
+        overridden_command: commands.Command | None = None
+        for command in [ctx.command, *ctx.command.parents]:
+            if hasattr(command.callback, "override"):
+                overridden_command = command
+                break
+        if overridden_command is not None:
+            log.debug(f"Command {overridden_command} has overrides")
+            if overridden_command is not ctx.command:
+                log.debug(
+                    f"Command '{ctx.command.qualified_name}' inherited overrides "
+                    "from parent command '{overridden_command.qualified_name}'"
+                )
+
+        # Update kwargs based on override, if one exists
+        if overridden_command:
             # Handle DM invocations
-            allow_dms = ctx.command.callback.override_dm
+            allow_dms = overridden_command.callback.override_dm
 
             # Remove default kwargs if reset is True
-            if ctx.command.callback.override_reset:
+            if overridden_command.callback.override_reset:
                 kwargs = {}
                 log.debug(
                     f"{ctx.author} called the '{ctx.command.name}' command and "
@@ -213,9 +222,9 @@ def whitelist_check(**default_kwargs: Container[int]) -> Callable[[Context], boo
                 )
 
             # Merge overwrites and defaults
-            for arg in ctx.command.callback.override:
+            for arg in overridden_command.callback.override:
                 default_value = kwargs.get(arg)
-                new_value = ctx.command.callback.override[arg]
+                new_value = overridden_command.callback.override[arg]
 
                 # Skip values that don't need merging, or can't be merged
                 if default_value is None or isinstance(arg, int):
@@ -257,10 +266,10 @@ def whitelist_check(**default_kwargs: Container[int]) -> Callable[[Context], boo
         channels = set(kwargs.get("channels") or {})
         categories = kwargs.get("categories")
 
-        # Only output override channels + community_bot_commands
+        # Only output override channels + sir_lancebot_playground
         if channels:
             default_whitelist_channels = set(WHITELISTED_CHANNELS)
-            default_whitelist_channels.discard(Channels.community_bot_commands)
+            default_whitelist_channels.discard(Channels.sir_lancebot_playground)
             channels.difference_update(default_whitelist_channels)
 
         # Add all whitelisted category channels, but skip if we're in DMs
@@ -304,7 +313,7 @@ def whitelist_override(bypass_defaults: bool = False, allow_dm: bool = False, **
     return inner
 
 
-def locked() -> Optional[Callable]:
+def locked() -> Callable | None:
     """
     Allows the user to only run one instance of the decorated command at a time.
 
@@ -312,11 +321,11 @@ def locked() -> Optional[Callable]:
 
     This decorator has to go before (below) the `command` decorator.
     """
-    def wrap(func: Callable) -> Optional[Callable]:
+    def wrap(func: Callable) -> Callable | None:
         func.__locks = WeakValueDictionary()
 
         @wraps(func)
-        async def inner(self: Callable, ctx: Context, *args, **kwargs) -> Optional[Callable]:
+        async def inner(self: Callable, ctx: Context, *args, **kwargs) -> Callable | None:
             lock = func.__locks.setdefault(ctx.author.id, Lock())
             if lock.locked():
                 embed = Embed()
@@ -329,7 +338,7 @@ def locked() -> Optional[Callable]:
                 )
                 embed.title = random.choice(ERROR_REPLIES)
                 await ctx.send(embed=embed)
-                return
+                return None
 
             async with func.__locks.setdefault(ctx.author.id, Lock()):
                 return await func(self, ctx, *args, **kwargs)

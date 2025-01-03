@@ -1,15 +1,15 @@
-import logging
 import random
 from json import loads
 from pathlib import Path
 
 import discord
 from discord.ext import commands
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 from bot.constants import Colours
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 HEART_EMOJIS = [":heart:", ":gift_heart:", ":revolving_hearts:", ":sparkling_heart:", ":two_hearts:"]
 
@@ -33,6 +33,6 @@ class SaveTheDate(commands.Cog):
         await ctx.send(embed=embed)
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Save the date Cog."""
-    bot.add_cog(SaveTheDate())
+    await bot.add_cog(SaveTheDate())

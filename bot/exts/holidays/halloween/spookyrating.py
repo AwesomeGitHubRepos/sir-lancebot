@@ -1,16 +1,16 @@
 import bisect
 import json
-import logging
 import random
 from pathlib import Path
 
 import discord
 from discord.ext import commands
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 from bot.constants import Colours
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 data: dict[str, dict[str, str]] = json.loads(
     Path("bot/resources/holidays/halloween/spooky_rating.json").read_text("utf8")
@@ -62,6 +62,6 @@ class SpookyRating(commands.Cog):
         await ctx.send(embed=embed)
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Spooky Rating Cog."""
-    bot.add_cog(SpookyRating())
+    await bot.add_cog(SpookyRating())

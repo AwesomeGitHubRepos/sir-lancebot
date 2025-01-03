@@ -1,8 +1,6 @@
-import asyncio
 from contextlib import suppress
 from functools import partial
 from pathlib import Path
-from typing import Union
 
 import discord
 import yaml
@@ -16,11 +14,11 @@ from bot.utils.randomization import RandomCycle
 SUGGESTION_FORM = "https://forms.gle/zw6kkJqv8U43Nfjg9"
 
 with Path("bot/resources/utilities/starter.yaml").open("r", encoding="utf8") as f:
-    STARTERS = yaml.load(f, Loader=yaml.FullLoader)
+    STARTERS = yaml.safe_load(f)
 
 with Path("bot/resources/utilities/py_topics.yaml").open("r", encoding="utf8") as f:
     # First ID is #python-general and the rest are top to bottom categories of Topical Chat/Help.
-    PY_TOPICS = yaml.load(f, Loader=yaml.FullLoader)
+    PY_TOPICS = yaml.safe_load(f)
 
     # Removing `None` from lists of topics, if not a list, it is changed to an empty one.
     PY_TOPICS = {k: [i for i in v if i] if isinstance(v, list) else [] for k, v in PY_TOPICS.items()}
@@ -67,7 +65,7 @@ class ConvoStarters(commands.Cog):
 
     @staticmethod
     def _predicate(
-        command_invoker: Union[discord.User, discord.Member],
+        command_invoker: discord.User | discord.Member,
         message: discord.Message,
         reaction: discord.Reaction,
         user: discord.User
@@ -84,7 +82,7 @@ class ConvoStarters(commands.Cog):
 
     async def _listen_for_refresh(
         self,
-        command_invoker: Union[discord.User, discord.Member],
+        command_invoker: discord.User | discord.Member,
         message: discord.Message
     ) -> None:
         await message.add_reaction("🔄")
@@ -95,7 +93,7 @@ class ConvoStarters(commands.Cog):
                     check=partial(self._predicate, command_invoker, message),
                     timeout=60.0
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 with suppress(discord.NotFound):
                     await message.clear_reaction("🔄")
                 break
@@ -121,6 +119,6 @@ class ConvoStarters(commands.Cog):
         self.bot.loop.create_task(self._listen_for_refresh(ctx.author, message))
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the ConvoStarters cog."""
-    bot.add_cog(ConvoStarters(bot))
+    await bot.add_cog(ConvoStarters(bot))

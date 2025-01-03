@@ -1,15 +1,15 @@
-import logging
 import random
 from json import loads
 from pathlib import Path
 
 import discord
 from discord.ext import commands
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 from bot.constants import Colours
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 PICKUP_LINES = loads(Path("bot/resources/holidays/valentines/pickup_lines.json").read_text("utf8"))
 
@@ -36,6 +36,6 @@ class PickupLine(commands.Cog):
         await ctx.send(embed=embed)
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Pickup lines Cog."""
-    bot.add_cog(PickupLine())
+    await bot.add_cog(PickupLine())

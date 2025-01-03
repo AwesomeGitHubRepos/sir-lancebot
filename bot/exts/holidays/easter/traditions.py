@@ -1,13 +1,13 @@
 import json
-import logging
 import random
 from pathlib import Path
 
 from discord.ext import commands
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 traditions = json.loads(Path("bot/resources/holidays/easter/traditions.json").read_text("utf8"))
 
@@ -23,6 +23,6 @@ class Traditions(commands.Cog):
         await ctx.send(f"{random_country}:\n{traditions[random_country]}")
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Traditions Cog."""
-    bot.add_cog(Traditions())
+    await bot.add_cog(Traditions())

@@ -1,16 +1,15 @@
-import logging
 import random
-from typing import Union
 
 import discord
 from async_rediscache import RedisCache
 from discord.ext import commands
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 from bot.constants import Channels, Month
 from bot.utils.decorators import in_month
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 # chance is 1 in x range, so 1 in 20 range would give 5% chance (for add candy)
 ADD_CANDY_REACTION_CHANCE = 20  # 5%
@@ -18,17 +17,17 @@ ADD_CANDY_EXISTING_REACTION_CHANCE = 10  # 10%
 ADD_SKULL_REACTION_CHANCE = 50  # 2%
 ADD_SKULL_EXISTING_REACTION_CHANCE = 20  # 5%
 
-EMOJIS = dict(
-    CANDY="\N{CANDY}",
-    SKULL="\N{SKULL}",
-    MEDALS=(
+EMOJIS = {
+    "CANDY": "\N{CANDY}",
+    "SKULL": "\N{SKULL}",
+    "MEDALS": (
         "\N{FIRST PLACE MEDAL}",
         "\N{SECOND PLACE MEDAL}",
         "\N{THIRD PLACE MEDAL}",
         "\N{SPORTS MEDAL}",
         "\N{SPORTS MEDAL}",
     ),
-)
+}
 
 
 class CandyCollection(commands.Cog):
@@ -55,7 +54,7 @@ class CandyCollection(commands.Cog):
         if message.author.bot:
             return
         # ensure it's hacktober channel
-        if message.channel.id != Channels.community_bot_commands:
+        if message.channel.id != Channels.sir_lancebot_playground:
             return
 
         # do random check for skull first as it has the lower chance
@@ -69,7 +68,7 @@ class CandyCollection(commands.Cog):
 
     @in_month(Month.OCTOBER)
     @commands.Cog.listener()
-    async def on_reaction_add(self, reaction: discord.Reaction, user: Union[discord.User, discord.Member]) -> None:
+    async def on_reaction_add(self, reaction: discord.Reaction, user: discord.User | discord.Member) -> None:
         """Add/remove candies from a person if the reaction satisfies criteria."""
         message = reaction.message
         # check to ensure the reactor is human
@@ -77,7 +76,7 @@ class CandyCollection(commands.Cog):
             return
 
         # check to ensure it is in correct channel
-        if message.channel.id != Channels.community_bot_commands:
+        if message.channel.id != Channels.sir_lancebot_playground:
             return
 
         # if its not a candy or skull, and it is one of 10 most recent messages,
@@ -88,10 +87,7 @@ class CandyCollection(commands.Cog):
             if message.author.bot:
                 return
 
-            recent_message_ids = map(
-                lambda m: m.id,
-                await self.hacktober_channel.history(limit=10).flatten()
-            )
+            recent_message_ids = [message.id async for message in self.hacktober_channel.history(limit=10)]
             if message.id in recent_message_ids:
                 await self.reacted_msg_chance(message)
             return
@@ -139,11 +135,11 @@ class CandyCollection(commands.Cog):
     @property
     def hacktober_channel(self) -> discord.TextChannel:
         """Get #hacktoberbot channel from its ID."""
-        return self.bot.get_channel(Channels.community_bot_commands)
+        return self.bot.get_channel(Channels.sir_lancebot_playground)
 
     @staticmethod
     async def send_spook_msg(
-        author: discord.Member, channel: discord.TextChannel, candies: Union[str, int]
+        author: discord.Member, channel: discord.TextChannel, candies: str | int
     ) -> None:
         """Send a spooky message."""
         e = discord.Embed(colour=author.colour)
@@ -214,6 +210,6 @@ class CandyCollection(commands.Cog):
         await ctx.send(embed=e)
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Candy Collection Cog."""
-    bot.add_cog(CandyCollection(bot))
+    await bot.add_cog(CandyCollection(bot))

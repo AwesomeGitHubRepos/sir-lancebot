@@ -1,21 +1,21 @@
 import bisect
 import hashlib
 import json
-import logging
 import random
+from collections.abc import Coroutine
 from pathlib import Path
-from typing import Coroutine, Optional
 
 import discord
 from discord import Member
 from discord.ext import commands
 from discord.ext.commands import BadArgument, Cog, clean_content
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
-from bot.constants import Channels, Client, Lovefest, Month
+from bot.constants import Channels, Month, PYTHON_PREFIX, Roles
 from bot.utils.decorators import in_month
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 LOVE_DATA = json.loads(Path("bot/resources/holidays/valentines/love_matches.json").read_text("utf8"))
 LOVE_DATA = sorted((int(key), value) for key, value in LOVE_DATA.items())
@@ -27,12 +27,12 @@ class LoveCalculator(Cog):
     @in_month(Month.FEBRUARY)
     @commands.command(aliases=("love_calculator", "love_calc"))
     @commands.cooldown(rate=1, per=5, type=commands.BucketType.user)
-    async def love(self, ctx: commands.Context, who: Member, whom: Optional[Member] = None) -> None:
+    async def love(self, ctx: commands.Context, who: Member, whom: Member | None = None) -> None:
         """
         Tells you how much the two love each other.
 
         This command requires at least one member as input, if two are given love will be calculated between
-        those two users, if only one is given, the second member is asusmed to be the invoker.
+        those two users, if only one is given, the second member is assumed to be the invoker.
         Members are converted from:
           - User ID
           - Mention
@@ -45,13 +45,13 @@ class LoveCalculator(Cog):
           Running .love @chrisjl#2655 @joe#6000 will yield the same result as before.
         """
         if (
-            Lovefest.role_id not in [role.id for role in who.roles]
-            or (whom is not None and Lovefest.role_id not in [role.id for role in whom.roles])
+            Roles.lovefest not in [role.id for role in who.roles]
+            or (whom is not None and Roles.lovefest not in [role.id for role in whom.roles])
         ):
             raise BadArgument(
                 "This command can only be ran against members with the lovefest role! "
                 "This role be can assigned by running "
-                f"`{Client.prefix}lovefest sub` in <#{Channels.community_bot_commands}>."
+                f"`{PYTHON_PREFIX}subscribe` in <#{Channels.bot_commands}>."
             )
 
         if whom is None:
@@ -90,11 +90,11 @@ class LoveCalculator(Cog):
             name="A letter from Dr. Love:",
             value=data["text"]
         )
-        embed.set_footer(text=f"You can unsubscribe from lovefest by using {Client.prefix}lovefest unsub")
+        embed.set_footer(text=f"You can unsubscribe from lovefest by using {PYTHON_PREFIX}subscribe.")
 
         await ctx.send(embed=embed)
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Love calculator Cog."""
-    bot.add_cog(LoveCalculator())
+    await bot.add_cog(LoveCalculator())

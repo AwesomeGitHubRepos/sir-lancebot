@@ -1,15 +1,15 @@
-import logging
 import random
 from os import environ
 
 import discord
 from discord.ext import commands
+from pydis_core.utils.logging import get_logger
 
 from bot.bot import Bot
 
 TMDB_API_KEY = environ.get("TMDB_API_KEY")
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class RomanceMovieFinder(commands.Cog):
@@ -62,6 +62,6 @@ class RomanceMovieFinder(commands.Cog):
                 await ctx.send(embed=embed)
 
 
-def setup(bot: Bot) -> None:
+async def setup(bot: Bot) -> None:
     """Load the Romance movie Cog."""
-    bot.add_cog(RomanceMovieFinder(bot))
+    await bot.add_cog(RomanceMovieFinder(bot))
